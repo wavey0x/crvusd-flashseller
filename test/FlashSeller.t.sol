@@ -23,15 +23,15 @@ contract FlashSellerTest is Test {
     }
 
     function test_FlashLoan() public {
-        uint256 pegkeeperBalance = POOL.balanceOf(address(pegKeeper));
+        uint256 pkDebtBefore = pegKeeper.debt();
         uint256 initialBalance = 100e18;
         deal(address(crvUsd), address(flashSeller), initialBalance);
         flashSeller.execute(4, AMOUNT_TO_FLASH);
         uint256 finalBalance = crvUsd.balanceOf(address(flashSeller));
-        uint256 pegkeeperBalanceAfter = POOL.balanceOf(address(pegKeeper));
-        uint256 diff = pegkeeperBalance - pegkeeperBalanceAfter;
-        console.log("Reduction in pegkeeper balance", diff/1e18);
-        console.log("Remaining pegkeeper balance", pegkeeperBalanceAfter/1e18);
+        uint256 pkDebtAfter = pegKeeper.debt();
+        uint256 diff = pkDebtBefore - pkDebtAfter;
+        console.log("Reduction in pegkeeper debt", diff/1e18);
+        console.log("Remaining pegkeeper debt", pkDebtAfter/1e18);
         console.log("Losses", (initialBalance - finalBalance)/1e18);
         assertGt(diff, 0);
     }
