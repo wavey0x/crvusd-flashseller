@@ -110,4 +110,9 @@ contract FlashSeller {
         authorized[_account] = _authorized;
         emit Authorized(_account, _authorized);
     }
+
+    function recoverERC20(address token, uint256 amount) external {
+        require(msg.sender == owner, "!owner");
+        IERC20(token).transfer(owner, amount);
+    }
 }

@@ -8,10 +8,11 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ICurvePool} from "interfaces/ICurvePool.sol";
 
 contract FlashSellerTest is Test {
-    FlashSeller public flashSeller;
+    uint256 public constant AMOUNT_TO_FLASH = 120_000e18;
+    uint256 public constant LOOPS = 6;
+    FlashSeller public flashSeller = new FlashSeller();
     IPegKeeper public pegKeeper;
-    IERC20 public crvUsd;
-    uint256 public AMOUNT_TO_FLASH = 150_000e18;
+    IERC20 public crvUsd = IERC20(0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E);
     ICurvePool public immutable POOL = ICurvePool(0x30cE6E5A75586F0E83bCAc77C9135E980e6bc7A8);
 
     function setUp() public {
@@ -19,14 +20,13 @@ contract FlashSellerTest is Test {
         pegKeeper = IPegKeeper(flashSeller.PEG_KEEPER());
         vm.prank(pegKeeper.admin());
         pegKeeper.set_new_action_delay(0);
-        crvUsd = IERC20(flashSeller.CRVUSD());
     }
 
     function test_FlashLoan() public {
         uint256 pkDebtBefore = pegKeeper.debt();
         uint256 initialBalance = 100e18;
         deal(address(crvUsd), address(flashSeller), initialBalance);
-        flashSeller.execute(4, AMOUNT_TO_FLASH);
+        flashSeller.execute(LOOPS, AMOUNT_TO_FLASH);
         uint256 finalBalance = crvUsd.balanceOf(address(flashSeller));
         uint256 pkDebtAfter = pegKeeper.debt();
         uint256 diff = pkDebtBefore - pkDebtAfter;
