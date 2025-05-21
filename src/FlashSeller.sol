@@ -5,7 +5,17 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "interfaces/IPegKeeper.sol";
 import "interfaces/ICurvePool.sol";
-import "interfaces/IPSM.sol";
+
+interface IPSM {
+    function swapExactInput(
+        uint256 amountIn,
+        uint256 minAmountOut,
+        address tokenIn,
+        address tokenOut,
+        address recipient,
+        uint256 deadline
+    ) external returns (uint256);
+}
 
 interface IFlashLender {
     function flashLoan(
@@ -16,17 +26,7 @@ interface IFlashLender {
     ) external returns (bool);
 }
 
-interface IERC3156FlashBorrower {
-    function onFlashLoan(
-        address initiator,
-        address token,
-        uint256 amount,
-        uint256 fee,
-        bytes calldata data
-    ) external returns (bytes32);
-}
-
-contract FlashSeller is IERC3156FlashBorrower {
+contract FlashSeller {
     using SafeERC20 for IERC20;
 
     address public constant FLASH_LENDER = 0x26dE7861e213A5351F6ED767d00e0839930e9eE1;
@@ -39,6 +39,7 @@ contract FlashSeller is IERC3156FlashBorrower {
     IPSM public constant ANGLE_PSM = IPSM(0x222222fD79264BBE280b4986F6FEfBC3524d0137);
     address public constant AgUSD = 0x0000206329b97DB379d5E1Bf586BbDB969C63274;
     address public constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
+
     address public owner;
     mapping(address => bool) public authorized;
 
@@ -50,12 +51,13 @@ contract FlashSeller is IERC3156FlashBorrower {
     }
 
     constructor() {
-        owner = msg.sender;
         IERC20(CRVUSD).approve(FLASH_LENDER, type(uint256).max);
         IERC20(CRVUSD).approve(address(CRVUSD_POOL), type(uint256).max);
         IERC20(USDC).approve(address(CRVUSD_USDC_POOL), type(uint256).max);
         IERC20(USDM).approve(address(ANGLE_PSM), type(uint256).max);
         IERC20(AgUSD).approve(address(ANGLE_PSM), type(uint256).max);
+
+        owner = msg.sender;
         authorized[msg.sender] = true;
         emit Authorized(msg.sender, true);
     }
@@ -66,12 +68,15 @@ contract FlashSeller is IERC3156FlashBorrower {
      * @param amount The amount of crvUSD to flash loan
      */
     function execute(uint256 loops, uint256 amount) external onlyAuthorized {
+        require(amount > 0, "amount = 0");
+        uint256 pkDebtBefore = PEG_KEEPER.debt();
         IFlashLender(FLASH_LENDER).flashLoan(
             address(this),
             CRVUSD,
             amount,
             abi.encode(loops)
         );
+        require(PEG_KEEPER.debt() < pkDebtBefore, "peg keeper debt not reduced");
     }
 
     function onFlashLoan(
@@ -80,7 +85,7 @@ contract FlashSeller is IERC3156FlashBorrower {
         uint256 amount,
         uint256 fee,
         bytes calldata data
-    ) external override returns (bytes32) {
+    ) external returns (bytes32) {
         require(initiator == address(this), "!initiator");
         require(msg.sender == FLASH_LENDER, "!flashLender");
         (uint256 loops) = abi.decode(data, (uint256));
