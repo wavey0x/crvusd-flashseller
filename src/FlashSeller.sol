@@ -3,6 +3,7 @@ pragma solidity 0.8.28;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/interfaces/IERC4626.sol";
 import "interfaces/IPegKeeper.sol";
 import "interfaces/ICurvePool.sol";
 
@@ -26,6 +27,10 @@ interface IFlashLender {
     ) external returns (bool);
 }
 
+interface IController {
+    function rug_debt_ceiling(address) external;
+}
+
 contract FlashSeller {
     using SafeERC20 for IERC20;
 
@@ -39,6 +44,8 @@ contract FlashSeller {
     IPSM public constant ANGLE_PSM = IPSM(0x222222fD79264BBE280b4986F6FEfBC3524d0137);
     address public constant AgUSD = 0x0000206329b97DB379d5E1Bf586BbDB969C63274;
     address public constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
+    address public constant steakUSDC = 0xBEEF01735c132Ada46AA9aA4c54623cAA92A64CB;
+    IController public constant CONTROLLER = IController(0xC9332fdCB1C491Dcc683bAe86Fe3cb70360738BC);
 
     address public owner;
     mapping(address => bool) public authorized;
@@ -76,7 +83,7 @@ contract FlashSeller {
             amount,
             abi.encode(loops)
         );
-        require(PEG_KEEPER.debt() < pkDebtBefore, "peg keeper debt not reduced");
+        require(PEG_KEEPER.debt() == 0, "peg keeper debt not eliminated");
     }
 
     function onFlashLoan(
@@ -96,10 +103,14 @@ contract FlashSeller {
         for (uint256 i = 0; i < loops; i++) {
             PEG_KEEPER.update();
         }
-        // 3. convert assets back to crvUSD
+        // 3. Burn any outstanding debt
+        CONTROLLER.rug_debt_ceiling(address(PEG_KEEPER));
+        // 4. convert assets back to crvUSD
         ANGLE_PSM.swapExactInput(amtUsdm, 0, USDM, AgUSD, address(this), block.timestamp);
-        uint256 amtUsdc = ANGLE_PSM.swapExactInput(amtUsdm, 0, AgUSD, USDC, address(this), block.timestamp);
-        uint256 amtCrvUsd = CRVUSD_USDC_POOL.exchange(0, 1, amtUsdc, 0);
+        uint256 amt = ANGLE_PSM.swapExactInput(amtUsdm, 0, AgUSD, steakUSDC, address(this), block.timestamp);
+        amt = IERC4626(steakUSDC).redeem(amt, address(this), address(this));
+        uint256 amtCrvUsd = CRVUSD_USDC_POOL.exchange(0, 1, amt, 0);
+        // 5. repay the flash loan
         IERC20(CRVUSD).transfer(FLASH_LENDER, amount + fee);
         return CALLBACK_SUCCESS;
     }
