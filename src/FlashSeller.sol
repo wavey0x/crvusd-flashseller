@@ -71,17 +71,17 @@ contract FlashSeller {
 
     /**
      * @notice Execute a flash loan
-     * @param loops The number of times to call update on the Peg Keeper
+     * @param updateCalls The number of times to call update on the Peg Keeper
      * @param amount The amount of crvUSD to flash loan
      */
-    function execute(uint256 loops, uint256 amount) external onlyAuthorized {
+    function execute(uint256 updateCalls, uint256 amount) external onlyAuthorized {
         require(amount > 0, "amount = 0");
         uint256 pkDebtBefore = PEG_KEEPER.debt();
         IFlashLender(FLASH_LENDER).flashLoan(
             address(this),
             CRVUSD,
             amount,
-            abi.encode(loops)
+            abi.encode(updateCalls)
         );
         require(PEG_KEEPER.debt() == 0, "peg keeper debt not eliminated");
     }
@@ -95,12 +95,12 @@ contract FlashSeller {
     ) external returns (bytes32) {
         require(initiator == address(this), "!initiator");
         require(msg.sender == FLASH_LENDER, "!flashLender");
-        (uint256 loops) = abi.decode(data, (uint256));
+        (uint256 updateCalls) = abi.decode(data, (uint256));
 
         // 1. sell crvUSD into the pool
         uint256 amtUsdm = CRVUSD_POOL.exchange(1, 0, amount, 0);
         // 2. call update on the peg keeper
-        for (uint256 i = 0; i < loops; i++) {
+        for (uint256 i = 0; i < updateCalls; i++) {
             PEG_KEEPER.update();
         }
         // 3. Burn any outstanding debt

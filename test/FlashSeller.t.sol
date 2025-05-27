@@ -9,7 +9,7 @@ import {ICurvePool} from "interfaces/ICurvePool.sol";
 
 contract FlashSellerTest is Test {
     uint256 public constant AMOUNT_TO_FLASH = 118_000e18;
-    uint256 public constant LOOPS = 29;
+    uint256 public constant UPDATE_CALLS = 29;
     FlashSeller public flashSeller = new FlashSeller();
     IPegKeeper public pegKeeper;
     IERC20 public crvUsd = IERC20(0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E);
@@ -26,7 +26,7 @@ contract FlashSellerTest is Test {
         uint256 pkDebtBefore = pegKeeper.debt();
         uint256 initialBalance = 50_000e18;
         deal(address(crvUsd), address(flashSeller), initialBalance);
-        flashSeller.execute(LOOPS, AMOUNT_TO_FLASH);
+        flashSeller.execute(UPDATE_CALLS, AMOUNT_TO_FLASH);
         uint256 finalBalance = crvUsd.balanceOf(address(flashSeller));
         uint256 pkDebtAfter = pegKeeper.debt();
         uint256 diff = pkDebtBefore - pkDebtAfter;
